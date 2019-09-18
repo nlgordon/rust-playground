@@ -81,23 +81,63 @@ mod tests {
     use hlt::position::Position;
     use std::time::{SystemTime};
 
+    struct InflucenceVector {
+        x: i32,
+        y: i32
+    }
+
+    impl InflucenceVector {
+        fn add(&self, right: InflucenceVector) -> InflucenceVector {
+            InflucenceVector{
+                x: self.x + right.x,
+                y: self.y + right.y
+            }
+        }
+    }
+
     #[test]
     fn it_works() {
-        let start = SystemTime::now();
-        let dimension = 10;
+        let dimension = 64;
         let mut map = GameMap::new(dimension, dimension);
         for y in 0..dimension {
             for x in 0..dimension {
                 map.cells[y][x].halite = x * y
             }
         }
-        assert_eq!(2 + 2, 4);
+        let target = Position{x: 0, y: 0};
+
+        let start = SystemTime::now();
+        let mut influence = InflucenceVector{x: 0, y: 0};
+        let mut counter = 0;
+        for y in 0..dimension {
+            for x in 0..dimension {
+                let source = Position { x: x as i32, y: y as i32 };
+                influence = influence.add(calculate_vector_wrapped(&map, &target, &source));
+                counter += 1;
+            }
+        }
+
         let end = SystemTime::now();
         let duration = end.duration_since(start).expect("Duration failed");
-        println!("Duration: {}", duration.as_secs() * 1000 * 1000 + duration.subsec_micros() as u64);
+        println!("Duration: {} for iterations: {}", duration.as_secs() * 1000 * 1000 + duration.subsec_micros() as u64, counter);
     }
 
-    fn calculate_vector_wrapped(map: &GameMap, target: &Position, source: &Position, halite: i32) -> (i32, i32) {
+    fn calculate_vector_wrapped(map: &GameMap, target: &Position, source: &Position) -> InflucenceVector {
+        let (actual_dx, actual_dy) = wrapped_dx_dy(map, target, source);
+
+        let magnitude = actual_dx.abs() + actual_dy.abs();
+        if magnitude == 0 {
+            return InflucenceVector{x: 0, y: 0}
+        }
+
+        let halite = map.cells[source.x as usize][source.y as usize].halite;
+        let halite_scaling = 0.8_f32.powi(magnitude) * halite as f32 / magnitude as f32;
+        let x_halite_influence = (actual_dx as f32 * halite_scaling) as i32;
+        let y_halite_influence = (actual_dy as f32 * halite_scaling) as i32;
+        return InflucenceVector{x: x_halite_influence, y: y_halite_influence}
+    }
+
+    fn wrapped_dx_dy(map: &GameMap, target: &Position, source: &Position) -> (i32, i32) {
         let normalized_source = map.normalize(source);
         let normalized_target = map.normalize(target);
         let dx = normalized_target.x - normalized_source.x;
@@ -106,19 +146,10 @@ mod tests {
         let abs_dy = dy.abs();
         let wrapped_dx = map.width as i32 - abs_dx;
         let wrapped_dy = map.height as i32 - abs_dy;
-        let dx_sign = dx / dx.abs();
-        let dy_sign = dy / dy.abs();
+        let dx_sign = if dx != 0 { dx / dx.abs() } else { 1 };
+        let dy_sign = if dy != 0 { dy / dy.abs() } else { 1 };
         let actual_dx = if abs_dx < wrapped_dx { dx } else { wrapped_dx * dx_sign * -1 };
         let actual_dy = if abs_dy < wrapped_dy { dy } else { wrapped_dy * dy_sign * -1 };
-
-        let magnitude = actual_dx.abs() + actual_dy.abs();
-        if magnitude == 0 {
-            return (0, 0)
-        }
-
-        let halite_scaling = 0.8_f32.powi(magnitude) * halite as f32 / magnitude as f32;
-        let x_halite_influence = (actual_dx as f32 * halite_scaling) as i32;
-        let y_halite_influence = (actual_dy as f32 * halite_scaling) as i32;
-        return (x_halite_influence, y_halite_influence)
+        (actual_dx, actual_dy)
     }
 }
