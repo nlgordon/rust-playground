@@ -2,5 +2,7 @@
 name = "iterators-and-speed"
 version = "0.1.0"
 authors = ["Nate Gordon <nlgordon@gmail.com>"]
+edition = "2018"
 
 [dependencies]
+rand = "0.4.0"
